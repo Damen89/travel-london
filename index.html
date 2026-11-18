@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12284c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Londra">
+<title>Londra 2026</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+  :root {
+    --bg: #f4f1ea; --card: #fff; --ink: #1d1d1f; --muted: #6b6b70;
+    --navy: #12284c; --red: #c8102e; --line: #e4dfd4;
+    --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111317; --card: #1b1e24; --ink: #eceef2; --muted: #9aa0aa; --line: #2b2f37; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  header { background: var(--navy); color: #fff; padding: calc(var(--safe-t) + 12px) 16px 0; flex-shrink: 0; }
+  header .top { display: flex; align-items: baseline; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
+  header h1 span { color: #ff6b6b; }
+  header .sub { font-size: 13px; opacity: .75; }
+  .days { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0; scrollbar-width: none; }
+  .days::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; border: 1px solid rgba(255,255,255,.3); background: transparent; color: #fff;
+    padding: 7px 13px; border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .chip.active { background: #fff; color: var(--navy); border-color: #fff; }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+
+  main { flex: 1; position: relative; overflow: hidden; }
+  .view { position: absolute; inset: 0; display: none; }
+  .view.active { display: block; }
+  #view-tour { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 24px; }
+
+  .day-head { margin: 0 0 14px; }
+  .day-head h2 { margin: 0; font-size: 20px; }
+  .day-head .progress { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; transition: width .3s; }
+
+  .timeline { position: relative; padding-left: 22px; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+  .stop { position: relative; background: var(--card); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06); border: 1px solid var(--line); transition: opacity .2s; }
+  .stop::before { content: ""; position: absolute; left: -20px; top: 16px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--card); border: 3px solid var(--c); }
+  .stop.done { opacity: .5; }
+  .stop.done::before { background: var(--c); }
+  .stop .row { display: flex; align-items: flex-start; gap: 10px; }
+  .stop .time { font-weight: 700; font-size: 14px; color: var(--c); min-width: 44px; padding-top: 1px; }
+  .stop .body { flex: 1; min-width: 0; }
+  .stop .name { font-weight: 650; font-size: 16px; line-height: 1.25; }
+  .stop.done .name { text-decoration: line-through; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; background: var(--red); color: #fff; padding: 2px 7px;
+    border-radius: 999px; margin-left: 6px; vertical-align: 2px; }
+  .stop .blurb { font-size: 14px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .stop .actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 10px;
+    padding: 9px 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center; }
+  .btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .check { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); background: transparent; flex-shrink: 0;
+    display: grid; place-items: center; cursor: pointer; color: #fff; font-size: 16px; padding: 0; }
+  .stop.done .check { background: var(--c); border-color: var(--c); }
+
+  details.bookings { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 18px; }
+  details.bookings summary { font-weight: 650; cursor: pointer; }
+  .bk { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .bk:first-of-type { margin-top: 10px; }
+  .bk input { width: 20px; height: 20px; accent-color: var(--navy); }
+  .bk.done span { text-decoration: line-through; color: var(--muted); }
+
+  #map, #metro-map { position: absolute; inset: 0; }
+  .map-fab { position: absolute; right: 12px; z-index: 500; background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px; font-weight: 600; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.15); cursor: pointer; }
+  .leaflet-popup-content { margin: 10px 12px; font-family: inherit; }
+  .pop-name { font-weight: 700; font-size: 14px; }
+  .pop-time { font-size: 12px; color: #666; }
+  .pop a { display: inline-block; margin-top: 6px; font-weight: 600; color: #12284c; }
+  .num-icon { border-radius: 50%; color: #fff; font-weight: 700; font-size: 12px; display: grid; place-items: center;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+
+  .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; gap: 14px; }
+  .empty .ico { font-size: 54px; }
+  .empty p { color: var(--muted); margin: 0; max-width: 320px; line-height: 1.45; }
+  .empty label.btn { flex: none; padding: 12px 20px; }
+
+  nav { display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: var(--safe-b); flex-shrink: 0; }
+  nav button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 9px 0 8px; font-size: 11px; font-weight: 600;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  nav button svg { width: 24px; height: 24px; }
+  nav button.active { color: var(--red); }
+  .hide-days .days { display: none; }
+  .hide-days header { padding-bottom: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>Londra <span>2026</span></h1>
+    <div class="sub" id="subtitle"></div>
+  </div>
+  <div class="days" id="days"></div>
+</header>
+
+<main>
+  <section class="view active" id="view-tour"></section>
+  <section class="view" id="view-map">
+    <div id="map"></div>
+    <button class="map-fab" style="bottom:16px" id="locate">📍 Dove sono</button>
+  </section>
+  <section class="view" id="view-metro">
+    <div id="metro-map"></div>
+    <div class="empty" id="metro-empty">
+      <div class="ico">🚇</div>
+      <h2 style="margin:0">Mappa della metro</h2>
+      <p>La mappa verrà aggiunta qui. Nel frattempo puoi caricare un'immagine (PNG o JPG) dal telefono: resterà salvata e consultabile offline.</p>
+      <label class="btn primary">Carica immagine<input type="file" accept="image/*" id="metro-file" hidden></label>
+    </div>
+    <button class="map-fab" style="bottom:16px; display:none" id="metro-change">Cambia immagine</button>
+  </section>
+</main>
+
+<nav>
+  <button data-view="tour" class="active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Tour</button>
+  <button data-view="map">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Mappe</button>
+  <button data-view="metro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/></svg>Metro</button>
+</nav>
+
+<script src="vendor/leaflet.js"></script>
+<script src="data.js"></script>
+<script>
+(() => {
+  // ---------- storage (protetto: alcuni browser lo bloccano) ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+  const done = store.get("done", {});
+  const bkDone = store.get("bookings", {});
+
+  // ---------- giorno iniziale: oggi se cade nel viaggio ----------
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/London" });
+  let dayIdx = Math.max(0, TRIP.days.findIndex(d => d.date === today));
+  if (TRIP.days.findIndex(d => d.date === today) < 0) dayIdx = store.get("day", 0);
+  let view = "tour";
+
+  document.getElementById("subtitle").textContent = TRIP.subtitle;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const navUrl = s => `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=transit`;
+  const placeUrl = s => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name + " London")}`;
+
+  // ---------- chip giorni ----------
+  const daysEl = document.getElementById("days");
+  function renderChips() {
+    daysEl.innerHTML = "";
+    const all = view === "map";
+    if (all) {
+      const b = document.createElement("button");
+      b.className = "chip" + (dayIdx === -1 ? " active" : "");
+      b.textContent = "Tutti";
+      b.onclick = () => selectDay(-1);
+      daysEl.appendChild(b);
+    }
+    TRIP.days.forEach((d, i) => {
+      const b = document.createElement("button");
+      b.className = "chip" + (i === dayIdx ? " active" : "");
+      b.innerHTML = `<span class="dot" style="background:${d.color}"></span>${esc(d.label)}`;
+      b.onclick = () => selectDay(i);
+      daysEl.appendChild(b);
+    });
+  }
+  function selectDay(i) {
+    if (i === -1 && view !== "map") i = 0;
+    dayIdx = i;
+    if (i >= 0) store.set("day", i);
+    renderChips();
+    if (view === "tour") renderTour();
+    if (view === "map") renderMap();
+  }
+
+  // ---------- TOUR ----------
+  const tourEl = document.getElementById("view-tour");
+  function renderTour() {
+    const d = TRIP.days[Math.max(0, dayIdx)];
+    const n = d.stops.filter((s, i) => done[d.id + i]).length;
+    let h = `<div class="day-head"><h2>${esc(d.title)}</h2>
+      <div class="progress">${n} di ${d.stops.length} tappe fatte</div>
+      <div class="bar"><i style="width:${(n / d.stops.length) * 100}%;background:${d.color}"></i></div></div>
+      <div class="timeline">`;
+    d.stops.forEach((s, i) => {
+      const k = d.id + i;
+      h += `<div class="stop${done[k] ? " done" : ""}" style="--c:${d.color}">
+        <div class="row">
+          <div class="time">${esc(s.time)}</div>
+          <div class="body"><div class="name">${esc(s.name)}${s.booked ? '<span class="badge">PRENOTATO</span>' : ""}</div>
+            <div class="blurb">${esc(s.blurb)}</div></div>
+          <button class="check" data-k="${k}" aria-label="Segna come fatto">${done[k] ? "✓" : ""}</button>
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="${navUrl(s)}" target="_blank" rel="noopener">Indicazioni</a>
+          <button class="btn" data-show="${i}">Sulla mappa</button>
+          <a class="btn" href="${placeUrl(s)}" target="_blank" rel="noopener">Info</a>
+        </div></div>`;
+    });
+    h += `</div><details class="bookings"><summary>Prenotazioni da fare</summary>`;
+    TRIP.bookings.forEach(b => {
+      const on = bkDone[b.id] ?? !!b.done;
+      h += `<label class="bk${on ? " done" : ""}"><input type="checkbox" data-bk="${b.id}"${on ? " checked" : ""}><span>${esc(b.label)}</span></label>`;
+    });
+    h += `</details>`;
+    tourEl.innerHTML = h;
+  }
+  tourEl.addEventListener("click", e => {
+    const c = e.target.closest(".check");
+    if (c) { const k = c.dataset.k; done[k] = !done[k]; store.set("done", done); renderTour(); return; }
+    const m = e.target.closest("[data-show]");
+    if (m) { focusStop = +m.dataset.show; switchView("map"); }
+  });
+  tourEl.addEventListener("change", e => {
+    const b = e.target.dataset.bk;
+    if (b) { bkDone[b] = e.target.checked; store.set("bookings", bkDone); e.target.parentElement.classList.toggle("done", e.target.checked); }
+  });
+
+  // ---------- MAPPE ----------
+  let map, layer, focusStop = null, meMarker;
+  function initMap() {
+    map = L.map("map", { zoomControl: false }).setView([51.507, -0.12], 12);
+    L.control.zoom({ position: "topright" }).addTo(map);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  function numIcon(n, color) {
+    return L.divIcon({ className: "", html: `<div class="num-icon" style="background:${color};width:26px;height:26px">${n}</div>`,
+      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12] });
+  }
+  function renderMap() {
+    if (!map) initMap();
+    layer.clearLayers();
+    const days = dayIdx === -1 ? TRIP.days : [TRIP.days[dayIdx]];
+    const pts = [];
+    const markers = [];
+    days.forEach(d => {
+      // il giorno del rientro include Gatwick: escluso dalla linea per non schiacciare la mappa
+      const stops = d.stops.filter(s => s.lat > 51.3);
+      L.polyline(stops.map(s => [s.lat, s.lng]), { color: d.color, weight: 4, opacity: .7, dashArray: "6 8" }).addTo(layer);
+      stops.forEach(s => {
+        const i = d.stops.indexOf(s);
+        const mk = L.marker([s.lat, s.lng], { icon: numIcon(i + 1, d.color) })
+          .bindPopup(`<div class="pop"><div class="pop-time">${esc(d.label)} · ${esc(s.time)}</div>
+            <div class="pop-name">${esc(s.name)}</div><a href="${navUrl(s)}" target="_blank" rel="noopener">Indicazioni →</a></div>`)
+          .addTo(layer);
+        markers[i] = mk;
+        pts.push([s.lat, s.lng]);
+      });
+    });
+    setTimeout(() => {
+      map.invalidateSize();
+      if (focusStop !== null && dayIdx >= 0 && markers[focusStop]) {
+        map.setView(markers[focusStop].getLatLng(), 16); markers[focusStop].openPopup(); focusStop = null;
+      } else if (pts.length) map.fitBounds(pts, { padding: [40, 40] });
+    }, 60);
+  }
+  document.getElementById("locate").onclick = () => {
+    if (!navigator.geolocation) return alertless("Geolocalizzazione non disponibile");
+    navigator.geolocation.getCurrentPosition(p => {
+      const ll = [p.coords.latitude, p.coords.longitude];
+      if (meMarker) meMarker.setLatLng(ll);
+      else meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1c7ed6", fillOpacity: 1 }).addTo(map);
+      map.setView(ll, 15);
+    }, () => alertless("Posizione non disponibile: controlla i permessi"), { enableHighAccuracy: true, timeout: 10000 });
+  };
+  function alertless(msg) {
+    const b = document.getElementById("locate"); const t = b.textContent;
+    b.textContent = msg; setTimeout(() => b.textContent = t, 2500);
+  }
+
+  // ---------- METRO ----------
+  // 1) se esiste metro.png/metro.jpg nella cartella dell'app la usa; 2) altrimenti un'immagine caricata dall'utente (IndexedDB)
+  let metroMap, metroOverlay;
+  const DB = "londra-app", ST = "files";
+  const idb = () => new Promise((res, rej) => {
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(ST);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  async function idbGet(k) { try { const db = await idb(); return await new Promise(r => { const q = db.transaction(ST).objectStore(ST).get(k); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); } catch { return null; } }
+  async function idbSet(k, v) { try { const db = await idb(); await new Promise(r => { const t = db.transaction(ST, "readwrite"); t.objectStore(ST).put(v, k); t.oncomplete = r; t.onerror = r; }); } catch {} }
+
+  function showMetro(src) {
+    const img = new Image();
+    img.onload = () => {
+      document.getElementById("metro-empty").style.display = "none";
+      if (!metroMap) metroMap = L.map("metro-map", { crs: L.CRS.Simple, minZoom: -5, maxZoom: 3, zoomSnap: .25, attributionControl: false });
+      if (metroOverlay) metroOverlay.remove();
+      const b = [[0, 0], [img.height, img.width]];
+      metroOverlay = L.imageOverlay(src, b).addTo(metroMap);
+      metroMap.invalidateSize();
+      metroMap.fitBounds(b);
+      metroMap.setMaxBounds(L.latLngBounds(b).pad(.2));
+    };
+    img.src = src;
+  }
+  async function loadMetro() {
+    for (const f of ["metro.png", "metro.jpg", "metro.webp"]) {
+      try { const r = await fetch(f, { method: "HEAD" }); if (r.ok) return showMetro(f); } catch {}
+    }
+    const blob = await idbGet("metro");
+    if (blob) { showMetro(URL.createObjectURL(blob)); document.getElementById("metro-change").style.display = "block"; }
+  }
+  document.getElementById("metro-file").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    await idbSet("metro", f);
+    showMetro(URL.createObjectURL(f));
+    document.getElementById("metro-change").style.display = "block";
+  };
+  document.getElementById("metro-change").onclick = () => document.getElementById("metro-file").click();
+
+  // ---------- navigazione ----------
+  let metroLoaded = false;
+  function switchView(v) {
+    view = v;
+    document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+    document.querySelectorAll(".view").forEach(s => s.classList.toggle("active", s.id === "view-" + v));
+    document.body.classList.toggle("hide-days", v === "metro");
+    if (v !== "map" && dayIdx === -1) dayIdx = store.get("day", 0);
+    renderChips();
+    if (v === "tour") renderTour();
+    if (v === "map") renderMap();
+    if (v === "metro") { if (!metroLoaded) { metroLoaded = true; loadMetro(); } else if (metroMap) setTimeout(() => metroMap.invalidateSize(), 60); }
+  }
+  document.querySelectorAll("nav button").forEach(b => b.onclick = () => switchView(b.dataset.view));
+
+  renderChips();
+  renderTour();
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
