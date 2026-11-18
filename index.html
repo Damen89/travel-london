@@ -81,7 +81,8 @@
   .bk input { width: 20px; height: 20px; accent-color: var(--navy); }
   .bk.done span { text-decoration: line-through; color: var(--muted); }
 
-  #map, #metro-map { position: absolute; inset: 0; }
+  #map, #gmap, #metro-map { position: absolute; inset: 0; }
+  .gm-style .gm-style-iw-c { padding: 10px 12px !important; }
   .map-fab { position: absolute; right: 12px; z-index: 500; background: var(--card); color: var(--ink); border: 1px solid var(--line);
     border-radius: 12px; padding: 10px 12px; font-weight: 600; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.15); cursor: pointer; }
   .leaflet-popup-content { margin: 10px 12px; font-family: inherit; }
@@ -118,6 +119,7 @@
   <section class="view active" id="view-tour"></section>
   <section class="view" id="view-map">
     <div id="map"></div>
+    <div id="gmap" style="display:none"></div>
     <button class="map-fab" style="bottom:16px" id="locate">📍 Dove sono</button>
   </section>
   <section class="view" id="view-metro">
@@ -142,6 +144,7 @@
 </nav>
 
 <script src="vendor/leaflet.js"></script>
+<script src="config.js"></script>
 <script src="data.js"></script>
 <script>
 (() => {
@@ -250,7 +253,55 @@
     return L.divIcon({ className: "", html: `<div class="num-icon" style="background:${color};width:26px;height:26px">${n}</div>`,
       iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12] });
   }
+  // ---- Google Maps (se in config.js c'è la chiave), altrimenti OpenStreetMap ----
+  const GKEY = (window.APP_CONFIG && window.APP_CONFIG.googleMapsKey) || "";
+  let useGoogle = !!GKEY, gLoading = null, gmap, gInfo, gMe, gObjs = [];
+  const gEl = document.getElementById("gmap"), lEl = document.getElementById("map");
+  const popHtml = (d, s) => `<div class="pop"><div class="pop-time">${esc(d.label)} · ${esc(s.time)}</div>
+    <div class="pop-name">${esc(s.name)}</div><a href="${navUrl(s)}" target="_blank" rel="noopener">Indicazioni →</a></div>`;
+  window.gm_authFailure = () => { useGoogle = false; gEl.style.display = "none"; renderMap(); };
+  function loadGoogle() {
+    return gLoading ||= new Promise((res, rej) => {
+      window.__gmapsReady = res;
+      const sc = document.createElement("script");
+      sc.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GKEY)}&callback=__gmapsReady&loading=async&language=it&region=GB`;
+      sc.async = true; sc.onerror = rej;
+      document.head.appendChild(sc);
+    });
+  }
+  async function renderGoogle() {
+    await loadGoogle();
+    lEl.style.display = "none"; gEl.style.display = "block";
+    if (!gmap) {
+      gmap = new google.maps.Map(gEl, { center: { lat: 51.507, lng: -0.12 }, zoom: 12, gestureHandling: "greedy",
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false });
+      gInfo = new google.maps.InfoWindow();
+    }
+    gObjs.forEach(o => o.setMap(null)); gObjs = [];
+    const days = dayIdx === -1 ? TRIP.days : [TRIP.days[dayIdx]];
+    const bounds = new google.maps.LatLngBounds(), markers = [];
+    days.forEach(d => {
+      const stops = d.stops.filter(s => s.lat > 51.3);
+      gObjs.push(new google.maps.Polyline({ map: gmap, path: stops.map(s => ({ lat: s.lat, lng: s.lng })), strokeOpacity: 0,
+        icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: .8, strokeColor: d.color, strokeWeight: 4, scale: 3 }, offset: "0", repeat: "14px" }] }));
+      stops.forEach(s => {
+        const i = d.stops.indexOf(s);
+        const m = new google.maps.Marker({ map: gmap, position: { lat: s.lat, lng: s.lng }, title: s.name,
+          label: { text: String(i + 1), color: "#fff", fontWeight: "700", fontSize: "12px" },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: d.color, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 } });
+        m.addListener("click", () => { gInfo.setContent(popHtml(d, s)); gInfo.open({ anchor: m, map: gmap }); });
+        gObjs.push(m); markers[i] = m; bounds.extend(m.getPosition());
+      });
+    });
+    if (focusStop !== null && dayIdx >= 0 && markers[focusStop]) {
+      const m = markers[focusStop]; gmap.setCenter(m.getPosition()); gmap.setZoom(16);
+      google.maps.event.trigger(m, "click"); focusStop = null;
+    } else if (!bounds.isEmpty()) gmap.fitBounds(bounds, 48);
+  }
+
   function renderMap() {
+    if (useGoogle) { renderGoogle().catch(() => { useGoogle = false; gEl.style.display = "none"; renderMap(); }); return; }
+    lEl.style.display = "block";
     if (!map) initMap();
     layer.clearLayers();
     const days = dayIdx === -1 ? TRIP.days : [TRIP.days[dayIdx]];
@@ -262,10 +313,7 @@
       L.polyline(stops.map(s => [s.lat, s.lng]), { color: d.color, weight: 4, opacity: .7, dashArray: "6 8" }).addTo(layer);
       stops.forEach(s => {
         const i = d.stops.indexOf(s);
-        const mk = L.marker([s.lat, s.lng], { icon: numIcon(i + 1, d.color) })
-          .bindPopup(`<div class="pop"><div class="pop-time">${esc(d.label)} · ${esc(s.time)}</div>
-            <div class="pop-name">${esc(s.name)}</div><a href="${navUrl(s)}" target="_blank" rel="noopener">Indicazioni →</a></div>`)
-          .addTo(layer);
+        const mk = L.marker([s.lat, s.lng], { icon: numIcon(i + 1, d.color) }).bindPopup(popHtml(d, s)).addTo(layer);
         markers[i] = mk;
         pts.push([s.lat, s.lng]);
       });
@@ -281,6 +329,13 @@
     if (!navigator.geolocation) return alertless("Geolocalizzazione non disponibile");
     navigator.geolocation.getCurrentPosition(p => {
       const ll = [p.coords.latitude, p.coords.longitude];
+      if (useGoogle && gmap) {
+        const pos = { lat: ll[0], lng: ll[1] };
+        if (gMe) gMe.setPosition(pos);
+        else gMe = new google.maps.Marker({ map: gmap, position: pos, zIndex: 999,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#1c7ed6", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3 } });
+        gmap.setCenter(pos); gmap.setZoom(15); return;
+      }
       if (meMarker) meMarker.setLatLng(ll);
       else meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1c7ed6", fillOpacity: 1 }).addTo(map);
       map.setView(ll, 15);

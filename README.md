@@ -26,6 +26,16 @@ Repository: `Damen89/travel-london`
 Aprila una volta con la connessione attiva e sfoglia la mappa nelle zone del tour:
 le mattonelle viste restano salvate e consultabili offline.
 
+## Google Maps
+La sezione Mappe usa Google Maps se in `config.js` c'è una chiave, altrimenti OpenStreetMap.
+1. Google Cloud Console → crea un progetto e attiva la fatturazione (Google prevede una quota gratuita mensile).
+2. *APIs & Services* → abilita **Maps JavaScript API**.
+3. *Credentials* → *Create credentials* → *API key*.
+4. Limita la chiave: *Application restrictions* → *Websites* → `https://damen89.github.io/*`;
+   *API restrictions* → solo **Maps JavaScript API**.
+5. Inserisci la chiave in `config.js` (`googleMapsKey`).
+Se la chiave non è valida l'app torna da sola a OpenStreetMap.
+
 ## Mappa della metro
 Due modi:
 - **Nell'app:** sezione Metro → *Carica immagine* (resta salvata sul telefono).
