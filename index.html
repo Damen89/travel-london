@@ -95,7 +95,11 @@
   .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; gap: 14px; }
   .empty .ico { font-size: 54px; }
   .empty p { color: var(--muted); margin: 0; max-width: 320px; line-height: 1.45; }
-  .empty label.btn { flex: none; padding: 12px 20px; }
+  .empty .btn { flex: none; padding: 12px 20px; }
+  #metro-empty { position: relative; z-index: 2; }
+  #metro-map { z-index: 1; visibility: hidden; }
+  #metro-map.ready { visibility: visible; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 
   nav { display: flex; background: var(--card); border-top: 1px solid var(--line); padding-bottom: var(--safe-b); flex-shrink: 0; }
   nav button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 9px 0 8px; font-size: 11px; font-weight: 600;
@@ -128,7 +132,8 @@
       <div class="ico">🚇</div>
       <h2 style="margin:0">Mappa della metro</h2>
       <p>La mappa verrà aggiunta qui. Nel frattempo puoi caricare un'immagine (PNG o JPG) dal telefono: resterà salvata e consultabile offline.</p>
-      <label class="btn primary">Carica immagine<input type="file" accept="image/*" id="metro-file" hidden></label>
+      <button type="button" class="btn primary" id="metro-pick">Carica immagine</button>
+      <input type="file" accept="image/*" id="metro-file" class="visually-hidden">
     </div>
     <button class="map-fab" style="bottom:16px; display:none" id="metro-change">Cambia immagine</button>
   </section>
@@ -362,6 +367,7 @@
     const img = new Image();
     img.onload = () => {
       document.getElementById("metro-empty").style.display = "none";
+      document.getElementById("metro-map").classList.add("ready");
       if (!metroMap) metroMap = L.map("metro-map", { crs: L.CRS.Simple, minZoom: -5, maxZoom: 3, zoomSnap: .25, attributionControl: false });
       if (metroOverlay) metroOverlay.remove();
       const b = [[0, 0], [img.height, img.width]];
@@ -386,6 +392,7 @@
     document.getElementById("metro-change").style.display = "block";
   };
   document.getElementById("metro-change").onclick = () => document.getElementById("metro-file").click();
+  document.getElementById("metro-pick").onclick = () => document.getElementById("metro-file").click();
 
   // ---------- navigazione ----------
   let metroLoaded = false;
