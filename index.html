@@ -69,6 +69,16 @@
   .stop .actions { display: flex; gap: 8px; margin-top: 10px; }
   .btn { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 10px;
     padding: 9px 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center; }
+  .btn.sq { flex: 0 0 48px; font-size: 15px; }
+  .btn.has-doc { background: var(--red); border-color: var(--red); color: #fff; font-size: 12px; }
+  #doc-viewer { position: fixed; inset: 0; z-index: 2000; background: #2b2f37; display: none; flex-direction: column; }
+  #doc-viewer.open { display: flex; }
+  #doc-viewer .dv-head { display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-t) + 10px) 12px 10px; background: var(--navy); color: #fff; }
+  #doc-viewer .dv-title { flex: 1; font-weight: 650; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #doc-viewer .dv-head button { border: 1px solid rgba(255,255,255,.35); background: transparent; color: #fff; border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 600; }
+  #doc-pages { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 10px 10px calc(var(--safe-b) + 10px); }
+  #doc-pages canvas, #doc-pages img { display: block; width: 100%; height: auto; background: #fff; margin: 0 auto 10px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  #doc-pages .dv-msg { color: #fff; text-align: center; margin-top: 40px; }
   .btn.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
   .check { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); background: transparent; flex-shrink: 0;
     display: grid; place-items: center; cursor: pointer; color: #fff; font-size: 16px; padding: 0; }
@@ -178,6 +188,17 @@
   </section>
 </main>
 
+<div id="doc-viewer" aria-modal="true" role="dialog">
+  <div class="dv-head">
+    <div class="dv-title" id="doc-title"></div>
+    <button id="doc-replace">Sostituisci</button>
+    <button id="doc-delete">Elimina</button>
+    <button id="doc-close">Chiudi</button>
+  </div>
+  <div id="doc-pages"></div>
+</div>
+<input type="file" accept="application/pdf,image/*" id="doc-file" class="visually-hidden">
+
 <nav>
   <button data-view="tour" class="active">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Tour</button>
@@ -194,7 +215,7 @@
 <script>
 (() => {
   // ---------- storage (protetto: alcuni browser lo bloccano) ----------
-  const APP_BUILD = "19/11 15:50";
+  const APP_BUILD = "19/11 16:05";
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
@@ -203,6 +224,7 @@
   const bkDone = store.get("bookings", {});
   const isBooked = id => { if (!id) return false; const b = TRIP.bookings.find(x => x.id === id); return bkDone[id] ?? !!(b && b.done); };
   let bookingsOpen = false;
+  const docs = new Set();   // id prenotazioni con un documento salvato sul telefono
 
   // ---------- giorno iniziale: oggi se cade nel viaggio ----------
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/London" });
@@ -266,6 +288,9 @@
           <a class="btn primary" href="${navUrl(s)}" target="_blank" rel="noopener">Indicazioni</a>
           <button class="btn" data-show="${i}">Sulla mappa</button>
           <a class="btn" href="${placeUrl(s)}" target="_blank" rel="noopener">GMap</a>
+          ${isBooked(s.booking) ? (docs.has(s.booking)
+            ? `<button class="btn sq has-doc" data-doc="${s.booking}" aria-label="Apri la prenotazione">PDF</button>`
+            : `<button class="btn sq" data-doc="${s.booking}" aria-label="Aggiungi il PDF della prenotazione">+</button>`) : ""}
         </div></div>`;
     });
     h += `</div><details class="bookings"${bookingsOpen ? " open" : ""}><summary>Prenotazioni da fare</summary>`;
@@ -279,6 +304,8 @@
   tourEl.addEventListener("click", e => {
     const c = e.target.closest(".check");
     if (c) { const k = c.dataset.k; done[k] = !done[k]; store.set("done", done); renderTour(); return; }
+    const dq = e.target.closest("[data-doc]");
+    if (dq) { const id = dq.dataset.doc; docs.has(id) ? openDoc(id) : pickDoc(id); return; }
     const m = e.target.closest("[data-show]");
     if (m) { focusStop = +m.dataset.show; switchView("map"); }
   });
@@ -438,6 +465,69 @@
   document.getElementById("metro-change").onclick = () => document.getElementById("metro-file").click();
   document.getElementById("metro-pick").onclick = () => document.getElementById("metro-file").click();
 
+  // ---------- DOCUMENTI DI PRENOTAZIONE (PDF/immagini, solo su questo telefono) ----------
+  let docTarget = null, docOpen = null, pdfjsReady = null;
+  const docLabel = id => { const b = TRIP.bookings.find(x => x.id === id); return b ? b.label.split(" — ")[0] : "Prenotazione"; };
+  async function idbDel(k) { try { const db = await idb(); await new Promise(r => { const t = db.transaction(ST, "readwrite"); t.objectStore(ST).delete(k); t.oncomplete = r; t.onerror = r; }); } catch {} }
+  async function loadDocs() {
+    for (const b of TRIP.bookings) if (await idbGet("doc:" + b.id)) docs.add(b.id);
+    renderTour();
+  }
+  function pickDoc(id) { docTarget = id; const f = document.getElementById("doc-file"); f.value = ""; f.click(); }
+  document.getElementById("doc-file").onchange = async e => {
+    const f = e.target.files[0]; if (!f || !docTarget) return;
+    await idbSet("doc:" + docTarget, { blob: f, name: f.name, type: f.type || (f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "") });
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    docs.add(docTarget);
+    const y = tourEl.scrollTop; renderTour(); tourEl.scrollTop = y;
+    openDoc(docTarget);
+  };
+  function loadPdfjs() {
+    return pdfjsReady ||= new Promise((res, rej) => {
+      const sc = document.createElement("script"); sc.src = "vendor/pdfjs/pdf.min.js";
+      sc.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js"; res(pdfjsLib); };
+      sc.onerror = () => { pdfjsReady = null; rej(); };
+      document.head.appendChild(sc);
+    });
+  }
+  async function openDoc(id) {
+    const rec = await idbGet("doc:" + id);
+    if (!rec) { docs.delete(id); renderTour(); return; }
+    docOpen = id;
+    const box = document.getElementById("doc-pages");
+    document.getElementById("doc-title").textContent = docLabel(id);
+    document.getElementById("doc-viewer").classList.add("open");
+    box.innerHTML = '<p class="dv-msg">Apro il documento…</p>';
+    try {
+      if ((rec.type || "").startsWith("image/")) {
+        const img = new Image(); img.src = URL.createObjectURL(rec.blob); img.alt = docLabel(id);
+        box.innerHTML = ""; box.appendChild(img); return;
+      }
+      const lib = await loadPdfjs();
+      const pdf = await lib.getDocument({ data: new Uint8Array(await rec.blob.arrayBuffer()) }).promise;
+      box.innerHTML = "";
+      const w = box.clientWidth - 20, dpr = Math.min(window.devicePixelRatio || 1, 3);
+      for (let n = 1; n <= pdf.numPages; n++) {
+        if (docOpen !== id) return;
+        const page = await pdf.getPage(n);
+        const vp = page.getViewport({ scale: (w * dpr) / page.getViewport({ scale: 1 }).width });
+        const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+        box.appendChild(c);
+        await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      }
+    } catch {
+      box.innerHTML = '<p class="dv-msg">Non riesco ad aprire il file. Prova a sostituirlo con il PDF originale.</p>';
+    }
+  }
+  function closeDoc() { docOpen = null; document.getElementById("doc-viewer").classList.remove("open"); document.getElementById("doc-pages").innerHTML = ""; }
+  document.getElementById("doc-close").onclick = closeDoc;
+  document.getElementById("doc-replace").onclick = () => { const id = docOpen; closeDoc(); pickDoc(id); };
+  document.getElementById("doc-delete").onclick = async () => {
+    const id = docOpen; if (!id || !confirm("Eliminare il documento di " + docLabel(id) + " da questo telefono?")) return;
+    await idbDel("doc:" + id); docs.delete(id); closeDoc();
+    const y = tourEl.scrollTop; renderTour(); tourEl.scrollTop = y;
+  };
+
   // ---------- navigazione ----------
   let metroLoaded = false;
   window.__showSchema = () => { if (!metroLoaded) { metroLoaded = true; loadMetro(); } else if (metroMap) setTimeout(() => metroMap.invalidateSize(), 60); };
@@ -456,6 +546,7 @@
 
   renderChips();
   renderTour();
+  loadDocs();
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
