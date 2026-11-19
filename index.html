@@ -200,6 +200,8 @@
   };
   const done = store.get("done", {});
   const bkDone = store.get("bookings", {});
+  const isBooked = id => { if (!id) return false; const b = TRIP.bookings.find(x => x.id === id); return bkDone[id] ?? !!(b && b.done); };
+  let bookingsOpen = false;
 
   // ---------- giorno iniziale: oggi se cade nel viaggio ----------
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/London" });
@@ -255,7 +257,7 @@
       h += `<div class="stop${done[k] ? " done" : ""}" style="--c:${d.color}">
         <div class="row">
           <div class="time">${esc(s.time)}</div>
-          <div class="body"><div class="name">${esc(s.name)}${s.booked ? '<span class="badge">PRENOTATO</span>' : ""}</div>
+          <div class="body"><div class="name">${esc(s.name)}${isBooked(s.booking) ? '<span class="badge">PRENOTATO</span>' : ""}</div>
             <div class="blurb">${esc(s.blurb)}</div></div>
           <button class="check" data-k="${k}" aria-label="Segna come fatto">${done[k] ? "✓" : ""}</button>
         </div>
@@ -265,9 +267,9 @@
           <a class="btn" href="${placeUrl(s)}" target="_blank" rel="noopener">GMap</a>
         </div></div>`;
     });
-    h += `</div><details class="bookings"><summary>Prenotazioni da fare</summary>`;
+    h += `</div><details class="bookings"${bookingsOpen ? " open" : ""}><summary>Prenotazioni da fare</summary>`;
     TRIP.bookings.forEach(b => {
-      const on = bkDone[b.id] ?? !!b.done;
+      const on = isBooked(b.id);
       h += `<label class="bk${on ? " done" : ""}"><input type="checkbox" data-bk="${b.id}"${on ? " checked" : ""}><span>${esc(b.label)}</span></label>`;
     });
     h += `</details>`;
@@ -279,9 +281,10 @@
     const m = e.target.closest("[data-show]");
     if (m) { focusStop = +m.dataset.show; switchView("map"); }
   });
+  tourEl.addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.bookings")) bookingsOpen = e.target.open; }, true);
   tourEl.addEventListener("change", e => {
     const b = e.target.dataset.bk;
-    if (b) { bkDone[b] = e.target.checked; store.set("bookings", bkDone); e.target.parentElement.classList.toggle("done", e.target.checked); }
+    if (b) { bkDone[b] = e.target.checked; store.set("bookings", bkDone); bookingsOpen = true; const y = tourEl.scrollTop; renderTour(); tourEl.scrollTop = y; }
   });
 
   // ---------- MAPPE ----------
