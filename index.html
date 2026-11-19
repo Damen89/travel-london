@@ -194,6 +194,7 @@
 <script>
 (() => {
   // ---------- storage (protetto: alcuni browser lo bloccano) ----------
+  const APP_BUILD = "19/11 15:50";
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
@@ -272,7 +273,7 @@
       const on = isBooked(b.id);
       h += `<label class="bk${on ? " done" : ""}"><input type="checkbox" data-bk="${b.id}"${on ? " checked" : ""}><span>${esc(b.label)}</span></label>`;
     });
-    h += `</details>`;
+    h += `</details><p class="muted" style="text-align:center;font-size:11px;margin-top:16px">Versione app: ${APP_BUILD}</p>`;
     tourEl.innerHTML = h;
   }
   tourEl.addEventListener("click", e => {
