@@ -1,6 +1,6 @@
 // Service worker: l'app funziona offline dopo la prima apertura.
 // Le mattonelle della mappa già viste restano in cache (max ~3000).
-const VERSION = "londra-v3";
+const VERSION = "londra-v4";
 const SHELL = [
   "./", "index.html", "config.js", "data.js", "tube.js", "manifest.json",
   "vendor/leaflet.js", "vendor/leaflet.css",
@@ -45,7 +45,7 @@ self.addEventListener("fetch", e => {
 
   // File dell'app: rete se disponibile (così gli aggiornamenti arrivano), altrimenti cache
   if (url.origin === location.origin) {
-    e.respondWith(fetch(e.request).then(r => {
+    e.respondWith(fetch(e.request, { cache: "no-cache" }).then(r => {
       if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(e.request, cp)); }
       return r;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match("index.html"))));
