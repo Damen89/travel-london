@@ -80,17 +80,18 @@
   // ---------- mappa linee ----------
   function initMap() {
     if (map) return;
-    map = L.map("tube-map", { zoomControl: false, preferCanvas: true }).setView([51.507, -0.12], 12);
+    map = L.map("tube-map", { zoomControl: false, preferCanvas: true }).setView([51.511, -0.118], 14);
     L.control.zoom({ position: "topright" }).addTo(map);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 19, subdomains: "abcd",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a> · Powered by TfL Open Data'
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, className: "tube-tiles",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Powered by TfL Open Data'
     }).addTo(map);
     linesLayer = L.layerGroup().addTo(map);
     stationsLayer = L.layerGroup().addTo(map);
     map.on("zoomend", toggleStations);
   }
   function toggleStations() {
+    map.getContainer().classList.toggle("show-labels", map.getZoom() >= 15);
     if (map.getZoom() >= 13) { if (!map.hasLayer(stationsLayer)) map.addLayer(stationsLayer); }
     else if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer);
   }
@@ -105,8 +106,8 @@
     geo.lines.forEach(l => {
       const good = isGood(l.id);
       l.paths.forEach(p => {
-        L.polyline(p, { color: "#fff", weight: 7, opacity: .9 }).addTo(linesLayer);
-        L.polyline(p, { color: color(l.id), weight: 4, opacity: 1, dashArray: good ? null : "8 6" })
+        L.polyline(p, { color: "#fff", weight: 8, opacity: .9 }).addTo(linesLayer);
+        L.polyline(p, { color: color(l.id), weight: 5, opacity: 1, dashArray: good ? null : "8 6" })
           .bindPopup(() => linePopup(l.id, l.name)).addTo(linesLayer);
       });
     });
@@ -118,6 +119,7 @@
           st.lines.map((id, i) => `<div class="pop-time"><span class="ldot" style="background:${color(id)}"></span>${esc(names[i])}` +
             `${isGood(id) ? "" : ` — <b style="color:#c8102e">${esc(statusText(id))}</b>`}</div>`).join("") +
           `<a href="https://www.google.com/maps/dir/?api=1&destination=${st.lat},${st.lon}&travelmode=transit" target="_blank" rel="noopener">Indicazioni →</a></div>`)
+        .bindTooltip(esc(st.name), { permanent: true, direction: "right", offset: [6, 0], className: "st-label" })
         .addTo(stationsLayer);
     });
     toggleStations();
