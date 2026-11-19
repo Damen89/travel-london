@@ -1,8 +1,8 @@
 // Service worker: l'app funziona offline dopo la prima apertura.
 // Le mattonelle della mappa già viste restano in cache (max ~3000).
-const VERSION = "londra-v2";
+const VERSION = "londra-v3";
 const SHELL = [
-  "./", "index.html", "config.js", "data.js", "manifest.json",
+  "./", "index.html", "config.js", "data.js", "tube.js", "manifest.json",
   "vendor/leaflet.js", "vendor/leaflet.css",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"
 ];

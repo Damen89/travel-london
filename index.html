@@ -97,6 +97,27 @@
   .empty p { color: var(--muted); margin: 0; max-width: 320px; line-height: 1.45; }
   .empty .btn { flex: none; padding: 12px 20px; }
   #metro-empty { position: relative; z-index: 2; }
+  .seg { display: flex; gap: 4px; margin: 10px 12px; background: var(--line); border-radius: 10px; padding: 3px; }
+  .seg button { flex: 1; border: 0; background: transparent; color: var(--ink); padding: 8px 0; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .seg button.active { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .metro-pane { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; display: none; }
+  .metro-pane.active { display: block; }
+  #tube-map { position: absolute; inset: 0; }
+  #tube-msg { display: none; position: absolute; top: 10px; left: 12px; right: 60px; z-index: 600; background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  #mp-status { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 12px 24px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .st-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 12px; }
+  .st-row { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+  .st-row summary { display: flex; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer; list-style: none; }
+  .st-row summary::-webkit-details-marker { display: none; }
+  .st-bar { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+  .st-name { flex: 1; font-weight: 650; }
+  .st-badge { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; text-align: right; }
+  .st-badge.ok { background: #e3f6e9; color: #0a7d33; }
+  .st-badge.ko { background: #fde4e7; color: #c8102e; }
+  .st-reason { margin: 0; padding: 0 12px 12px 28px; font-size: 13px; line-height: 1.45; }
+  .ldot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
   #metro-map { z-index: 1; visibility: hidden; }
   #metro-map.ready { visibility: visible; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
@@ -127,15 +148,28 @@
     <button class="map-fab" style="bottom:16px" id="locate">📍 Dove sono</button>
   </section>
   <section class="view" id="view-metro">
+    <div class="seg">
+      <button data-pane="lines" class="active">Linee</button>
+      <button data-pane="status">Stato</button>
+      <button data-pane="schema">Schema</button>
+    </div>
+    <div class="metro-pane active" id="mp-lines">
+      <div id="tube-map"></div>
+      <div id="tube-msg"></div>
+      <button class="map-fab" style="bottom:36px" id="tube-locate">📍 Dove sono</button>
+    </div>
+    <div class="metro-pane" id="mp-status"><div id="tube-status"></div></div>
+    <div class="metro-pane" id="mp-schema">
     <div id="metro-map"></div>
     <div class="empty" id="metro-empty">
       <div class="ico">🚇</div>
-      <h2 style="margin:0">Mappa della metro</h2>
-      <p>La mappa verrà aggiunta qui. Nel frattempo puoi caricare un'immagine (PNG o JPG) dal telefono: resterà salvata e consultabile offline.</p>
+      <h2 style="margin:0">Schema della metro</h2>
+      <p>Carica lo schema ufficiale (PNG o JPG) dal telefono: resta salvato solo su questo dispositivo ed è consultabile offline.</p>
       <button type="button" class="btn primary" id="metro-pick">Carica immagine</button>
       <input type="file" accept="image/*" id="metro-file" class="visually-hidden">
     </div>
     <button class="map-fab" style="bottom:16px; display:none" id="metro-change">Cambia immagine</button>
+    </div>
   </section>
 </main>
 
@@ -151,6 +185,7 @@
 <script src="vendor/leaflet.js"></script>
 <script src="config.js"></script>
 <script src="data.js"></script>
+<script src="tube.js"></script>
 <script>
 (() => {
   // ---------- storage (protetto: alcuni browser lo bloccano) ----------
@@ -396,6 +431,7 @@
 
   // ---------- navigazione ----------
   let metroLoaded = false;
+  window.__showSchema = () => { if (!metroLoaded) { metroLoaded = true; loadMetro(); } else if (metroMap) setTimeout(() => metroMap.invalidateSize(), 60); };
   function switchView(v) {
     view = v;
     document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.view === v));
@@ -405,7 +441,7 @@
     renderChips();
     if (v === "tour") renderTour();
     if (v === "map") renderMap();
-    if (v === "metro") { if (!metroLoaded) { metroLoaded = true; loadMetro(); } else if (metroMap) setTimeout(() => metroMap.invalidateSize(), 60); }
+    if (v === "metro") { if (window.Tube) Tube.show(); } else if (window.Tube) Tube.hide();
   }
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => switchView(b.dataset.view));
 
